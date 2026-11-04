@@ -227,12 +227,14 @@
    配置区：部署时只改这一段
    ========================================================= */
 const CONFIG = {
-  owner:  '你的GitHub用户名',      // ← 改成你的 GitHub 用户名（或组织名）
-  repo:   'progress-tracker',      // ← 改成存放本页面的仓库名
-  dataPath:'data/progress.json',   // 数据文件在仓库中的路径
-  branch: 'main',                  // 默认分支，一般为 main
-  autoSaveDelay: 2000,             // 修改后多少毫秒自动保存
-  apiBase:'https://api.github.com' // GitHub API 地址，一般不用改
+  owner:         'gywlxp',      // 改成你的GitHub名
+  repo:          'progress-tracker',      // 仓库名，不用改
+  branch:        'main',
+  token:         '你的GitHub PAT',        // 按之前教的步骤生成，只勾这一个仓库的Contents读写权限
+  username:      '佳时',                 // 你要的登录账号，随便改，比如改成团队名
+  password:      '123456',                // 你要的登录密码，改成只有你们团队知道的
+  dataPath:      'data/progress.json',
+  autoSaveDelay: 2000
 };
 /* ========================================================= */
 
