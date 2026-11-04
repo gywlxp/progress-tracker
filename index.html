@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多团队项目进度实时跟踪表</title>
+<script src="https://aisearch-task.bj.bcebos.com/static/tailwindcss-3.4.17.js"></script>
+<script src="https://aisearch-task.bj.bcebos.com/static/echarts-5.6.0.min.js"></script>
+<style>
+  html,body{
+    font-family:'PingFang SC','HarmonyOS Sans SC','Microsoft YaHei',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .display-font{font-family:Georgia,'Times New Roman','Songti SC','STSong',serif;}
+  body{
+    background:
+      radial-gradient(1100px 560px at 8% -12%, rgba(79,70,229,.13), transparent 62%),
+      radial-gradient(900px 480px at 102% -6%, rgba(16,185,129,.10), transparent 58%),
+      linear-gradient(180deg,#f8fafc 0%,#eef2ff 100%);
+    background-attachment:fixed;
+  }
+  @keyframes rise{from{opacity:.92;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .rise{animation:rise .55s cubic-bezier(.2,.8,.2,1) both;}
+  .d1{animation-delay:.04s}.d2{animation-delay:.10s}.d3{animation-delay:.16s}.d4{animation-delay:.22s}
+  .d5{animation-delay:.28s}.d6{animation-delay:.34s}
+
+  .pt-scroll{overflow-x:auto;}
+  table.pt-table{border-collapse:separate;border-spacing:0;min-width:1140px;width:100%;background:#fff;}
+  table.pt-table thead th{
+    position:sticky;top:0;z-index:5;
+    background:linear-gradient(180deg,#f1f5f9,#e2e8f0);
+    color:#334155;font-weight:700;font-size:13px;letter-spacing:.02em;
+    padding:11px 12px;text-align:left;white-space:nowrap;
+    border-bottom:1px solid #cbd5e1;
+  }
+  table.pt-table td{border-bottom:1px solid #eef2f7;border-right:1px solid #f4f7fb;vertical-align:middle;}
+  table.pt-table tbody tr:hover{background:#f8faff;}
+  .cell-input{
+    width:100%;background:transparent;border:0;outline:none;padding:9px 12px;
+    font-size:15px;color:#0f172a;font-family:inherit;border-radius:6px;
+  }
+  .cell-input::placeholder{color:#cbd5e1;}
+  .cell-input[readonly]{color:#64748b;cursor:default;}
+  .cell-input:not([readonly]):focus{background:rgba(79,70,229,.08);box-shadow:inset 0 0 0 2px rgba(79,70,229,.45);}
+  .cell-input[type=number]{text-align:center;}
+  select.cell-input{cursor:pointer;font-weight:600;}
+  select.cell-input[disabled]{color:#64748b;cursor:default;-webkit-appearance:none;appearance:none;}
+  .mono{font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-variant-numeric:tabular-nums;}
+  .kpi-num{font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:4px 11px;border-radius:999px;white-space:nowrap;}
+  .btn{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;padding:8px 14px;border-radius:10px;transition:all .18s;cursor:pointer;border:0;}
+  .icon-btn{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;transition:all .18s;cursor:pointer;border:0;}
+</style>
+</head>
+<body class="min-h-screen text-slate-800">
+
+<!-- ============ 顶部栏：标题 + 授权 ============ -->
+<header class="sticky top-0 z-30 backdrop-blur-xl bg-white/85 border-b border-slate-200 shadow-[0_1px_20px_rgba(15,23,42,.04)]">
+  <div class="max-w-[1440px] mx-auto px-4 md:px-6 py-3 flex flex-wrap items-center gap-3 justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-400 grid place-items-center shadow-lg shadow-indigo-200/70 shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <path d="M3 3v18h18"/><path d="M7 15l3-3 3 3 5-6"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-[18px] md:text-[21px] font-black tracking-tight text-slate-900 leading-tight">多团队项目进度实时跟踪表</h1>
+        <p class="text-[12px] text-slate-500">授权后可编辑 · 修改自动保存 · 图表实时联动</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <span id="permBadge" class="badge bg-slate-100 text-slate-600">
+        <span class="w-2 h-2 rounded-full bg-slate-400"></span>只读模式
+      </span>
+      <input id="patInput" type="password" autocomplete="off" aria-label="GitHub 访问令牌" placeholder="粘贴 GitHub PAT 授权编辑"
+             class="px-3 py-2 border border-slate-300 rounded-lg text-[14px] w-[230px] outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"/>
+      <button id="authBtn" class="btn bg-slate-900 text-white hover:bg-slate-700">授权</button>
+      <button id="logoutBtn" class="btn bg-slate-100 text-slate-700 hover:bg-slate-200 hidden">退出编辑</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1440px] mx-auto px-4 md:px-6 py-5">
+
+  <!-- ============ KPI 卡片 ============ -->
+  <section class="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+    <div class="rise d1 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col justify-between">
+      <div class="flex items-center gap-2 text-slate-500">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="shrink-0"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <span class="text-[13px] font-semibold">总任务数</span>
+      </div>
+      <div id="kpiTotal" class="kpi-num text-[32px] md:text-[36px] font-black text-slate-900 mt-2">0</div>
+    </div>
+
+    <div class="rise d2 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col justify-between">
+      <div class="flex items-center gap-2 text-emerald-600">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="shrink-0"><path d="M20 6L9 17l-5-5"/></svg>
+        <span class="text-[13px] font-semibold">已完成</span>
+      </div>
+      <div id="kpiDone" class="kpi-num text-[32px] md:text-[36px] font-black text-emerald-600 mt-2">0</div>
+    </div>
+
+    <div class="rise d3 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col justify-between">
+      <div class="flex items-center gap-2 text-indigo-600">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="shrink-0"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="text-[13px] font-semibold">进行中</span>
+      </div>
+      <div id="kpiDoing" class="kpi-num text-[32px] md:text-[36px] font-black text-indigo-600 mt-2">0</div>
+    </div>
+
+    <div class="rise d4 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col justify-between">
+      <div class="flex items-center gap-2 text-rose-600">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="shrink-0"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+        <span class="text-[13px] font-semibold">阻塞/延期</span>
+      </div>
+      <div id="kpiBlocked" class="kpi-num text-[32px] md:text-[36px] font-black text-rose-600 mt-2">0</div>
+    </div>
+
+    <div class="rise d5 col-span-2 lg:col-span-1 bg-gradient-to-br from-indigo-600 to-indigo-500 rounded-2xl shadow-lg shadow-indigo-200/60 p-4 text-white flex flex-col justify-between">
+      <div class="flex items-center gap-2 text-indigo-100">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="shrink-0"><path d="M3 20h18M6 20V10M12 20V4M18 20v-7"/></svg>
+        <span class="text-[13px] font-semibold">整体完成率</span>
+      </div>
+      <div id="kpiProgress" class="kpi-num text-[36px] md:text-[40px] font-black mt-1">0%</div>
+      <div class="w-full bg-white/25 rounded-full h-2.5 mt-1">
+        <div id="progressBar" class="bg-white h-2.5 rounded-full transition-all duration-500" style="width:0%"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 图表区 ============ -->
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+    <div class="rise d5 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 md:p-5">
+      <div class="flex items-baseline justify-between mb-1">
+        <h2 class="text-[17px] font-bold text-slate-900">各部门平均完成率</h2>
+        <span class="text-[12px] text-slate-400">单位：%</span>
+      </div>
+      <div id="deptChart" class="w-full h-[270px]"></div>
+    </div>
+    <div class="rise d6 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 md:p-5">
+      <div class="flex items-baseline justify-between mb-1">
+        <h2 class="text-[17px] font-bold text-slate-900">任务状态分布</h2>
+        <span class="text-[12px] text-slate-400">按任务条数</span>
+      </div>
+      <div id="statusChart" class="w-full h-[270px]"></div>
+    </div>
+  </section>
+
+  <!-- ============ 表格区 ============ -->
+  <section class="rise d6 mt-4 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    <div class="px-4 md:px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <h2 class="text-[17px] font-bold text-slate-900">任务明细表</h2>
+        <p id="tableHint" class="text-[13px] text-slate-500 mt-0.5">当前为只读模式，点右上角「授权」后可编辑</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="saveTip" class="text-[13px] text-slate-500">就绪</span>
+        <button id="addRowBtn" class="btn bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="shrink-0"><path d="M12 5v14M5 12h14"/></svg>
+          添加任务
+        </button>
+      </div>
+    </div>
+    <div class="pt-scroll">
+      <table class="pt-table">
+        <thead>
+          <tr>
+            <th style="width:58px">序号</th>
+            <th style="width:112px">所属部门</th>
+            <th style="width:170px">任务名称</th>
+            <th style="width:190px">交付物</th>
+            <th style="width:92px">负责人</th>
+            <th style="width:122px">计划开始</th>
+            <th style="width:122px">计划完成</th>
+            <th style="width:110px">完成进度(%)</th>
+            <th style="width:118px">状态</th>
+            <th style="width:196px">阻塞说明</th>
+            <th style="width:60px" class="text-center">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 使用说明（折叠） ============ -->
+  <section class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+    <details class="rise d6 bg-white rounded-2xl border border-slate-100 shadow-sm p-5 group">
+      <summary class="cursor-pointer list-none flex items-center justify-between">
+        <span class="text-[16px] font-bold text-slate-900">🔐 怎么获得编辑权限</span>
+        <span class="text-slate-400 text-[13px] group-open:hidden">展开</span>
+      </summary>
+      <ol class="mt-3 text-[15px] leading-relaxed text-slate-600 list-decimal pl-5 space-y-1.5">
+        <li>在 GitHub 生成一个 <b>细粒度 PAT</b>，只授权本仓库。</li>
+        <li>仓库权限勾选 <b>Contents: Read and write</b>。</li>
+        <li>把 token 粘贴到右上角输入框，点「授权」，即可编辑并自动保存。</li>
+      </ol>
+    </details>
+    <details class="rise d6 bg-white rounded-2xl border border-slate-100 shadow-sm p-5 group">
+      <summary class="cursor-pointer list-none flex items-center justify-between">
+        <span class="text-[16px] font-bold text-slate-900">💾 数据存在哪里</span>
+        <span class="text-slate-400 text-[13px] group-open:hidden">展开</span>
+      </summary>
+      <ul class="mt-3 text-[15px] leading-relaxed text-slate-600 list-disc pl-5 space-y-1.5">
+        <li>所有数据保存在你仓库的 <span class="mono text-[13px] bg-slate-100 px-1.5 py-0.5 rounded">data/progress.json</span> 里。</li>
+        <li>每次修改都会生成一条 Git 提交记录，可随时回滚任意历史版本。</li>
+        <li>不依赖任何第三方服务器，数据完全在你自己的仓库中。</li>
+      </ul>
+    </details>
+  </section>
+
+  <footer class="text-center text-[12px] text-slate-400 mt-6 mb-2">
+    修改后自动保存 · 保存状态见右上角提示 · 所有人刷新页面即可看到最新进度
+  </footer>
+</main>
+
+<datalist id="deptList">
+  <option value="研发部"></option>
+  <option value="测试部"></option>
+  <option value="产品部"></option>
+  <option value="运维部"></option>
+  <option value="设计部"></option>
+</datalist>
+
+<script>
+/* =========================================================
+   配置区：部署时只改这一段
+   ========================================================= */
+const CONFIG = {
+  owner:  '你的GitHub用户名',      // ← 改成你的 GitHub 用户名（或组织名）
+  repo:   'progress-tracker',      // ← 改成存放本页面的仓库名
+  dataPath:'data/progress.json',   // 数据文件在仓库中的路径
+  branch: 'main',                  // 默认分支，一般为 main
+  autoSaveDelay: 2000,             // 修改后多少毫秒自动保存
+  apiBase:'https://api.github.com' // GitHub API 地址，一般不用改
+};
+/* ========================================================= */
+
+const STATUSES = ['未开始','进行中','已完成','已阻塞','已延期'];
+const STATUS_COLOR = {
+  '未开始':'#94a3b8','进行中':'#6366f1','已完成':'#10b981','已阻塞':'#ef4444','已延期':'#f59e0b'
+};
+
+let state = { tasks: [], editMode:false, pat:null, sha:null, saveTimer:null };
+let charts = {};
+
+/* ---------- 工具函数 ---------- */
+function el(id){ return document.getElementById(id); }
+function b64encode(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  const chunk = 0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    bin += String.fromCharCode.apply(null, bytes.subarray(i,i+chunk));
+  }
+  return btoa(bin);
+}
+function b64decode(b64){
+  const bin = atob((b64||'').replace(/\s/g,''));
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+function ghHeaders(){
+  const h = { 'Accept':'application/vnd.github+json' };
+  if(state.pat) h['Authorization'] = 'Bearer ' + state.pat;
+  return h;
+}
+function showTip(msg, kind){
+  const t = el('saveTip');
+  t.textContent = msg;
+  t.className = 'text-[13px] ' + (kind==='err' ? 'text-rose-600 font-semibold'
+                    : kind==='ok' ? 'text-emerald-600 font-semibold' : 'text-slate-500');
+}
+function escapeAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+/* ---------- 默认示例数据 ---------- */
+function defaultTasks(){
+  return [
+    { dept:'研发部', name:'核心接口开发', deliverable:'接口文档+自测通过', owner:'张三', start:'2026-11-01', due:'2026-11-15', progress:30, status:'进行中', block:'无' },
+    { dept:'测试部', name:'测试用例编写', deliverable:'完整测试用例集', owner:'李四', start:'2026-11-10', due:'2026-11-20', progress:0, status:'未开始', block:'等待接口文档' },
+    { dept:'产品部', name:'需求终稿确认', deliverable:'签字版需求文档', owner:'王五', start:'2026-10-25', due:'2026-11-05', progress:100, status:'已完成', block:'无' },
+    { dept:'运维部', name:'部署环境准备', deliverable:'测试环境可用', owner:'赵六', start:'2026-11-03', due:'2026-11-10', progress:80, status:'进行中', block:'待开通服务器权限' }
+  ];
+}
+
+/* ---------- 表格渲染 ---------- */
+function renderTable(){
+  const tb = el('tbody');
+  const ro = state.editMode ? '' : 'readonly';
+  const dis = state.editMode ? '' : 'disabled';
+  tb.innerHTML = state.tasks.map((t, i) => {
+    const rn = i + 1;
+    const opts = STATUSES.map(s =>
+      `<option value="${s}"${s===t.status?' selected':''}>${s}</option>`).join('');
+    return `<tr data-i="${i}">
+      <td class="text-center text-[14px] font-semibold text-slate-400 mono">${rn}</td>
+      <td><input class="cell-input" aria-label="第${rn}行 所属部门" list="deptList" data-f="dept" value="${escapeAttr(t.dept)}" placeholder="部门" ${ro}/></td>
+      <td><input class="cell-input" aria-label="第${rn}行 任务名称" data-f="name" value="${escapeAttr(t.name)}" placeholder="任务名称" ${ro}/></td>
+      <td><input class="cell-input" aria-label="第${rn}行 交付物" data-f="deliverable" value="${escapeAttr(t.deliverable)}" placeholder="可验证的产出" ${ro}/></td>
+      <td><input class="cell-input" aria-label="第${rn}行 负责人" data-f="owner" value="${escapeAttr(t.owner)}" placeholder="负责人" ${ro}/></td>
+      <td><input class="cell-input" aria-label="第${rn}行 计划开始" type="date" data-f="start" value="${escapeAttr(t.start)}" ${ro}/></td>
+      <td><input class="cell-input" aria-label="第${rn}行 计划完成" type="date" data-f="due" value="${escapeAttr(t.due)}" ${ro}/></td>
+      <td><input class="cell-input" aria-label="第${rn}行 完成进度百分比" type="number" min="0" max="100" step="5" data-f="progress" value="${Number(t.progress)||0}" ${ro}/></td>
+      <td><select class="cell-input" aria-label="第${rn}行 任务状态" data-f="status" style="color:${STATUS_COLOR[t.status]||'#334155'}" ${dis}>${opts}</select></td>
+      <td><input class="cell-input" aria-label="第${rn}行 阻塞说明" data-f="block" value="${escapeAttr(t.block)}" placeholder="卡点/需协调事项" ${ro}/></td>
+      <td class="text-center">
+        <button aria-label="删除第${rn}行" class="icon-btn ${state.editMode?'text-rose-500 hover:bg-rose-50':'text-slate-300 cursor-not-allowed'}"
+                data-del="${i}" ${state.editMode?'':'disabled'} title="删除此行">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="shrink-0"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  el('addRowBtn').disabled = !state.editMode;
+  el('tableHint').textContent = state.editMode
+    ? '可编辑模式：直接改单元格，2 秒后自动保存'
+    : '当前为只读模式，点右上角「授权」后可编辑';
+  el('patInput').disabled = state.editMode;
+  el('authBtn').disabled = state.editMode;
+  el('logoutBtn').classList.toggle('hidden', !state.editMode);
+}
+
+/* ---------- 图表 ---------- */
+let echartsReady = false;
+function initCharts(){
+  if(typeof echarts === 'undefined'){ console.warn('ECharts 未加载，图表区暂不可用'); return; }
+  echartsReady = true;
+  charts.dept = echarts.init(el('deptChart'));
+  charts.status = echarts.init(el('statusChart'));
+  window.addEventListener('resize', () => Object.values(charts).forEach(c => c && c.resize()));
+}
+function updateCharts(){
+  const tasks = state.tasks;
+  const total = tasks.length;
+  const done = tasks.filter(t => t.status==='已完成' || Number(t.progress)>=100).length;
+  const doing = tasks.filter(t => t.status==='进行中').length;
+  const blocked = tasks.filter(t => t.status==='已阻塞' || t.status==='已延期').length;
+  const avg = total>0 ? Math.round(tasks.reduce((s,t)=>s+(Number(t.progress)||0),0)/total) : 0;
+
+  el('kpiTotal').textContent = total;
+  el('kpiDone').textContent = done;
+  el('kpiDoing').textContent = doing;
+  el('kpiBlocked').textContent = blocked;
+  el('kpiProgress').textContent = avg + '%';
+  el('progressBar').style.width = avg + '%';
+
+  if(!echartsReady || !charts.dept || !charts.status) return;
+
+  // 部门完成率
+  const dept = {};
+  tasks.forEach(t => {
+    const k = t.dept || '未分类';
+    if(!dept[k]) dept[k] = { n:0, sum:0 };
+    dept[k].n++; dept[k].sum += (Number(t.progress)||0);
+  });
+  const deptNames = Object.keys(dept);
+  const deptVals  = deptNames.map(k => Math.round(dept[k].sum/dept[k].n));
+  charts.dept.setOption({
+    grid:{ left:8, right:16, top:24, bottom:8, containLabel:true },
+    tooltip:{ trigger:'axis', axisPointer:{type:'shadow'}, formatter:'{b}：{c}%' },
+    xAxis:{ type:'category', data:deptNames, axisLabel:{ fontSize:12, color:'#64748b', interval:0, rotate: deptNames.length>5?25:0 }, axisLine:{ lineStyle:{color:'#e2e8f0'} } },
+    yAxis:{ type:'value', max:100, axisLabel:{ fontSize:12, color:'#94a3b8', formatter:'{value}%' }, splitLine:{ lineStyle:{color:'#f1f5f9'} } },
+    series:[{
+      type:'bar', data:deptVals, barMaxWidth:46,
+      itemStyle:{ borderRadius:[8,8,0,0], color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#818cf8'},{offset:1,color:'#4f46e5'}]) },
+      label:{ show:true, position:'top', formatter:'{c}%', fontSize:12, color:'#4f46e5', fontWeight:'bold' }
+    }],
+    animationDuration:600
+  });
+
+  // 状态分布
+  const sc = {};
+  tasks.forEach(t => { sc[t.status] = (sc[t.status]||0)+1; });
+  const pieData = STATUSES.filter(s => sc[s]).map(s => ({ name:s, value:sc[s], itemStyle:{ color:STATUS_COLOR[s] } }));
+  charts.status.setOption({
+    tooltip:{ trigger:'item', formatter:'{b}：{c} 条（{d}%）' },
+    legend:{ bottom:0, itemWidth:10, itemHeight:10, textStyle:{ fontSize:12, color:'#64748b' } },
+    series:[{
+      type:'pie', radius:['44%','70%'], center:['50%','44%'], avoidLabelOverlap:true,
+      data: pieData.length?pieData:[{name:'暂无任务', value:1, itemStyle:{color:'#e2e8f0'}}],
+      label:{ formatter:'{b}\n{c}', fontSize:12, color:'#475569' },
+      labelLine:{ length:10, length2:8 },
+      emphasis:{ scale:true, scaleSize:6 }
+    }],
+    animationDuration:600
+  });
+}
+function refreshAll(){ renderTable(); updateCharts(); }
+
+/* ---------- GitHub 读写 ---------- */
+async function loadRemote(){
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try{
+    const url = `${CONFIG.apiBase}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.dataPath}?ref=${CONFIG.branch}&t=${Date.now()}`;
+    const r = await fetch(url, { headers: ghHeaders(), signal: ctrl.signal });
+    clearTimeout(timer);
+    if(r.status === 404){
+      state.tasks = defaultTasks(); state.sha = null;
+      showTip('未找到数据文件，已载入示例数据');
+      return;
+    }
+    if(!r.ok){
+      state.tasks = defaultTasks(); state.sha = null;
+      showTip('读取失败(' + r.status + ')，已载入示例数据', 'err');
+      return;
+    }
+    const j = await r.json();
+    state.sha = j.sha;
+    const raw = JSON.parse(b64decode(j.content || ''));
+    state.tasks = Array.isArray(raw) ? raw : (raw.tasks || []);
+    if(!state.tasks.length) state.tasks = defaultTasks();
+  }catch(e){
+    clearTimeout(timer);
+    state.tasks = defaultTasks(); state.sha = null;
+    showTip('网络异常，已载入示例数据', 'err');
+  }
+}
+
+async function saveRemote(){
+  if(!state.editMode || !state.pat) return;
+  showTip('正在保存…');
+  const body = {
+    message: '更新项目进度 ' + new Date().toLocaleString('zh-CN'),
+    content: b64encode(JSON.stringify(state.tasks, null, 2)),
+    branch: CONFIG.branch
+  };
+  if(state.sha) body.sha = state.sha;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try{
+    const r = await fetch(`${CONFIG.apiBase}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.dataPath}`, {
+      method:'PUT', headers: ghHeaders(), body: JSON.stringify(body), signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if(!r.ok){
+      const txt = await r.text();
+      let msg = r.status;
+      try{ msg = JSON.parse(txt).message || r.status; }catch(_){}
+      showTip('保存失败：' + msg, 'err');
+      return;
+    }
+    const j = await r.json();
+    state.sha = j.content.sha;
+    showTip('已自动保存 ' + new Date().toLocaleTimeString('zh-CN'), 'ok');
+  }catch(e){
+    clearTimeout(timer);
+    showTip('保存失败：网络异常', 'err');
+  }
+}
+function scheduleSave(){
+  if(!state.editMode) return;
+  showTip('待保存…');
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(saveRemote, CONFIG.autoSaveDelay);
+}
+
+/* ---------- 表格事件（委托） ---------- */
+el('tbody').addEventListener('input', e => {
+  const inp = e.target.closest('.cell-input');
+  if(!inp) return;
+  const tr = inp.closest('tr');
+  const i = Number(tr.dataset.i);
+  const f = inp.dataset.f;
+  if(!state.tasks[i]) return;
+  state.tasks[i][f] = (f === 'progress') ? Math.max(0, Math.min(100, Number(inp.value)||0)) : inp.value;
+  if(f === 'status') inp.style.color = STATUS_COLOR[inp.value] || '#334155';
+  updateCharts();
+  scheduleSave();
+});
+el('tbody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-del]');
+  if(!btn || !state.editMode) return;
+  const i = Number(btn.dataset.del);
+  state.tasks.splice(i,1);
+  refreshAll();
+  scheduleSave();
+});
+el('addRowBtn').addEventListener('click', () => {
+  if(!state.editMode) return;
+  state.tasks.push({ dept:'', name:'', deliverable:'', owner:'', start:'', due:'', progress:0, status:'未开始', block:'' });
+  refreshAll();
+  scheduleSave();
+});
+
+/* ---------- 授权 ---------- */
+async function verifyPat(pat){
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try{
+    const r = await fetch(`${CONFIG.apiBase}/user`, { headers:{ 'Authorization':'Bearer ' + pat, 'Accept':'application/vnd.github+json' }, signal: ctrl.signal });
+    return r.ok;
+  }finally{ clearTimeout(timer); }
+}
+function setEditUI(on){
+  state.editMode = on;
+  const badge = el('permBadge');
+  if(on){
+    badge.className = 'badge bg-emerald-100 text-emerald-700';
+    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>可编辑模式';
+  }else{
+    badge.className = 'badge bg-slate-100 text-slate-600';
+    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span>只读模式';
+  }
+}
+el('authBtn').addEventListener('click', async () => {
+  const pat = el('patInput').value.trim();
+  if(!pat){ showTip('请先粘贴 PAT', 'err'); return; }
+  showTip('正在校验…');
+  try{
+    if(!(await verifyPat(pat))){ showTip('PAT 无效，请检查', 'err'); return; }
+  }catch(e){ showTip('校验失败：网络异常', 'err'); return; }
+  state.pat = pat;
+  localStorage.setItem('progress_pat', pat);
+  setEditUI(true);
+  renderTable();
+  await loadRemote();
+  refreshAll();
+  showTip('授权成功，现在可以编辑', 'ok');
+});
+el('logoutBtn').addEventListener('click', () => {
+  state.pat = null; state.editMode = false;
+  localStorage.removeItem('progress_pat');
+  el('patInput').value = ''; el('patInput').disabled = false; el('authBtn').disabled = false;
+  setEditUI(false);
+  refreshAll();
+  showTip('已退出编辑，切回只读');
+});
+
+/* ---------- 启动 ---------- */
+(async function boot(){
+  initCharts();
+  // 先用示例数据把首屏渲染出来，避免等待网络时页面空白
+  state.tasks = defaultTasks();
+  setEditUI(false);
+  refreshAll();
+
+  // 恢复上次的登录状态
+  const saved = localStorage.getItem('progress_pat');
+  if(saved){
+    try{
+      if(await verifyPat(saved)){ state.pat = saved; setEditUI(true); }
+      else{ localStorage.removeItem('progress_pat'); }
+    }catch(_){ /* 离线或超时，保持只读 */ }
+  }
+
+  // 拉取仓库中的最新数据覆盖
+  await loadRemote();
+  refreshAll();
+  if(!state.editMode) showTip('只读模式，可正常查看数据与图表');
+})();
+</script>
+</body>
+</html>

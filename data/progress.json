@@ -1,0 +1,46 @@
+[
+  {
+    "dept": "研发部",
+    "name": "核心接口开发",
+    "deliverable": "接口文档 + 自测通过",
+    "owner": "张三",
+    "start": "2026-11-01",
+    "due": "2026-11-15",
+    "progress": 30,
+    "status": "进行中",
+    "block": "无"
+  },
+  {
+    "dept": "测试部",
+    "name": "测试用例编写",
+    "deliverable": "完整测试用例集",
+    "owner": "李四",
+    "start": "2026-11-10",
+    "due": "2026-11-20",
+    "progress": 0,
+    "status": "未开始",
+    "block": "等待接口文档"
+  },
+  {
+    "dept": "产品部",
+    "name": "需求终稿确认",
+    "deliverable": "签字版需求文档",
+    "owner": "王五",
+    "start": "2026-10-25",
+    "due": "2026-11-05",
+    "progress": 100,
+    "status": "已完成",
+    "block": "无"
+  },
+  {
+    "dept": "运维部",
+    "name": "部署环境准备",
+    "deliverable": "测试环境可用",
+    "owner": "赵六",
+    "start": "2026-11-03",
+    "due": "2026-11-10",
+    "progress": 80,
+    "status": "进行中",
+    "block": "待开通服务器权限"
+  }
+]
